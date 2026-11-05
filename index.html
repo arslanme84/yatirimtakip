@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <script>
+    // Android / PWA URL normalizer: Adresin sonundaki /index.html veya /index..html fazlalığını kök adrese temizler
+    if (window.location.pathname.includes('index') || window.location.pathname.includes('..')) {
+      window.history.replaceState(null, '', window.location.origin + '/');
+    }
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Altın & Döviz Portföyüm</title>
+  
+  <!-- PWA & Mobile Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Portföyüm">
+  <meta name="theme-color" content="#0b0f19">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- SECURITY PIN SCREEN OVERLAY -->
+  <div id="pinScreen" class="pin-screen-overlay">
+    <div class="pin-header">
+      <div class="pin-logo">₺</div>
+      <h2 id="pinTitle" class="pin-title">Portföyüm</h2>
+      <p id="pinSubtitle" class="pin-subtitle">Lütfen Güvenlik PIN Kodunuzu Girin</p>
+    </div>
+
+    <!-- PIN Dots -->
+    <div id="pinDots" class="pin-dots-container">
+      <div class="pin-dot" id="dot-0"></div>
+      <div class="pin-dot" id="dot-1"></div>
+      <div class="pin-dot" id="dot-2"></div>
+      <div class="pin-dot" id="dot-3"></div>
+    </div>
+
+    <!-- Error Message -->
+    <div id="pinError" class="pin-error-text">Hatalı PIN kodu, tekrar deneyin</div>
+
+    <!-- Numeric Keypad -->
+    <div class="pin-keypad">
+      <button type="button" class="pin-key" onclick="pressPinDigit('1')">1</button>
+      <button type="button" class="pin-key" onclick="pressPinDigit('2')">2</button>
+      <button type="button" class="pin-key" onclick="pressPinDigit('3')">3</button>
+      <button type="button" class="pin-key" onclick="pressPinDigit('4')">4</button>
+      <button type="button" class="pin-key" onclick="pressPinDigit('5')">5</button>
+      <button type="button" class="pin-key" onclick="pressPinDigit('6')">6</button>
+      <button type="button" class="pin-key" onclick="pressPinDigit('7')">7</button>
+      <button type="button" class="pin-key" onclick="pressPinDigit('8')">8</button>
+      <button type="button" class="pin-key" onclick="pressPinDigit('9')">9</button>
+      <button type="button" class="pin-key key-action" onclick="clearPin()">C</button>
+      <button type="button" class="pin-key" onclick="pressPinDigit('0')">0</button>
+      <button type="button" class="pin-key key-action" onclick="deletePinDigit()"><i class="fa-solid fa-delete-left"></i></button>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast-box"></div>
+
+  <div class="app-container">
+    
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="logo-area">
+        <div class="logo-icon">₺</div>
+        <div class="logo-text">
+          <h1>Portföyüm</h1>
+          <div id="liveStatus" class="live-badge">
+            <span class="live-dot"></span> <span>Canlı Piyasa</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="togglePrivacy()" title="Tutarları Gizle / Göster">
+          <i id="privacyIcon" class="fa-solid fa-eye"></i>
+        </button>
+        <button id="btnRefresh" class="icon-btn" onclick="fetchLiveRates()" title="Kurları Yenile">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+        <button class="icon-btn" onclick="lockApp()" title="Uygulamayı Kilitle">
+          <i class="fa-solid fa-lock"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- TAB 1: PORTFOLIO (Varlıklarım) -->
+    <main id="tab-portfolio" class="tab-content active">
+      
+      <!-- Portfolio Hero Card -->
+      <section class="hero-card">
+        <div class="hero-label">
+          <span>Toplam Portföy Değeri</span>
+          <span style="font-size:11px; opacity:0.8;">Anlık Piyasa</span>
+        </div>
+        <div id="heroBalance" class="hero-balance">
+          <span class="currency-sym">₺</span> 0,00
+        </div>
+        <div id="heroProfitBadge" class="profit-badge neutral">
+          <i class="fa-solid fa-minus"></i> <span>0,00 ₺ (% 0,0)</span>
+        </div>
+
+        <div class="hero-stats-grid">
+          <div class="stat-item">
+            <span class="stat-title">Toplam Maliyet</span>
+            <span id="statCost" class="stat-val">0,00 ₺</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-title">Açık Kâr/Zarar</span>
+            <span id="statUnrealized" class="stat-val gain">0,00 ₺</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-title">Cebe Giren Kâr</span>
+            <span id="statRealized" class="stat-val gain">0,00 ₺</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quick Action Buttons -->
+      <div class="action-buttons-grid">
+        <button class="btn-action btn-buy" onclick="openBuyModal()">
+          <i class="fa-solid fa-plus-circle"></i> Alış Ekle
+        </button>
+        <button class="btn-action btn-sell" onclick="openSellModal()">
+          <i class="fa-solid fa-minus-circle"></i> Satış Ekle
+        </button>
+      </div>
+
+      <!-- Section Title & Filters -->
+      <div class="section-header">
+        <div class="section-title">
+          <span>Varlıklarım</span>
+          <span id="portfolioCount" class="badge-count">0 Varlık</span>
+        </div>
+      </div>
+
+      <div class="filter-scroll">
+        <div class="chip active" onclick="setPortfolioFilter('all', this)">Tümü</div>
+        <div class="chip" onclick="setPortfolioFilter('gold', this)">Altın & Gümüş</div>
+        <div class="chip" onclick="setPortfolioFilter('forex', this)">Dövizler</div>
+      </div>
+
+      <!-- Empty State -->
+      <div id="portfolioEmpty" class="empty-state" style="display: none;">
+        <i class="fa-solid fa-wallet empty-icon"></i>
+        <div class="empty-title">Henüz Yatırım Kaydınız Yok</div>
+        <div class="empty-desc">
+          Aldığınız altın veya dövizleri ekleyerek anlık kâr/zararınızı ve portföy değerinizi takip etmeye başlayın.
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px; max-width:260px; margin:0 auto;">
+          <button class="btn-action btn-buy" onclick="openBuyModal()">
+            <i class="fa-solid fa-plus"></i> İlk Alışınızı Ekleyin
+          </button>
+          <button class="btn-card-action" onclick="loadDemoData()">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Örnek Veri ile Dene
+          </button>
+        </div>
+      </div>
+
+      <!-- Asset Cards List -->
+      <div id="portfolioList"></div>
+    </main>
+
+    <!-- TAB 2: MARKETS (Canlı Kurlar) -->
+    <section id="tab-markets" class="tab-content">
+      <div class="section-header" style="margin-bottom: 14px;">
+        <div class="section-title">
+          <i class="fa-solid fa-chart-line" style="color:var(--accent-gold);"></i>
+          <span>Canlı Piyasa Fiyatları</span>
+        </div>
+        <span style="font-size:11px; color:var(--text-dim);">Serbest Piyasa</span>
+      </div>
+
+      <!-- Search Bar -->
+      <div style="margin-bottom: 12px; position:relative;">
+        <input type="text" id="marketSearch" class="form-input" placeholder="Varlık ara (örn: Gram, Dolar, Çeyrek)..." style="padding-left:38px;">
+        <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:14px;"></i>
+      </div>
+
+      <!-- Market Category Filters -->
+      <div class="filter-scroll">
+        <div class="chip active" onclick="setMarketFilter('all', this)">Tümü</div>
+        <div class="chip" onclick="setMarketFilter('gold', this)">Altın & Gümüş</div>
+        <div class="chip" onclick="setMarketFilter('forex', this)">Döviz Kurları</div>
+      </div>
+
+      <!-- Market List -->
+      <div id="marketList"></div>
+    </section>
+
+    <!-- TAB 3: HISTORY (İşlem Geçmişi) -->
+    <section id="tab-history" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">
+          <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i>
+          <span>İşlem Geçmişi</span>
+        </div>
+      </div>
+
+      <!-- History Filters -->
+      <div class="filter-scroll">
+        <div class="chip active" onclick="setHistoryFilter('all', this)">Tüm İşlemler</div>
+        <div class="chip" onclick="setHistoryFilter('BUY', this)">Yalnızca Alışlar</div>
+        <div class="chip" onclick="setHistoryFilter('SELL', this)">Yalnızca Satışlar</div>
+      </div>
+
+      <!-- History Empty State -->
+      <div id="historyEmpty" class="empty-state" style="display: none;">
+        <i class="fa-solid fa-receipt empty-icon"></i>
+        <div class="empty-title">Kayıtlı İşlem Bulunamadı</div>
+        <div class="empty-desc">Yaptığınız alış ve satış hareketleri burada kronolojik olarak listelenir.</div>
+      </div>
+
+      <!-- Transaction List -->
+      <div id="historyList"></div>
+    </section>
+
+    <!-- TAB 4: ANALYTICS (Dağılım & Analiz) -->
+    <section id="tab-analytics" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">
+          <i class="fa-solid fa-chart-pie" style="color:var(--accent-gold);"></i>
+          <span>Portföy Analizi & Dağılım</span>
+        </div>
+      </div>
+
+      <div class="settings-section" style="text-align: center; padding: 24px 16px;">
+        <canvas id="portfolioChart" width="240" height="240" style="margin: 0 auto; display:block;"></canvas>
+      </div>
+
+      <div class="settings-section" id="analyticsSummary"></div>
+    </section>
+
+    <!-- TAB 5: SETTINGS & BACKUP (Ayarlar) -->
+    <section id="tab-settings" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">
+          <i class="fa-solid fa-gear" style="color:var(--accent-gold);"></i>
+          <span>Ayarlar & Yedekleme</span>
+        </div>
+      </div>
+
+      <!-- Mobile Install Guide Card -->
+      <div class="settings-section" style="border-color: rgba(245, 158, 11, 0.4);">
+        <h4 style="font-size:15px; color:#fff; font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+          <i class="fa-solid fa-mobile-screen-button" style="color:var(--accent-gold);"></i>
+          Telefona Uygulama Olarak Ekle
+        </h4>
+        <p style="font-size:12px; color:var(--text-muted); line-height:1.5; margin-bottom:12px;">
+          Bu web uygulamasını telefonunuzun ana ekranına ekleyerek tıpkı App Store / Play Store uygulaması gibi tam ekran kullanabilirsiniz:
+        </p>
+        
+        <div style="background:var(--bg-secondary); border-radius:10px; padding:12px; margin-bottom:8px;">
+          <strong style="font-size:13px; color:#fff;"><i class="fa-brands fa-apple"></i> iPhone (Safari):</strong>
+          <p style="font-size:12px; color:var(--text-dim); margin-top:3px;">
+            Alt kısımdaki <strong>Paylaş</strong> (kare içinde yukarı ok) butonuna basın, ardından <strong>"Ana Ekrana Ekle"</strong> seçeneğini tıklayın.
+          </p>
+        </div>
+
+        <div style="background:var(--bg-secondary); border-radius:10px; padding:12px;">
+          <strong style="font-size:13px; color:#fff;"><i class="fa-brands fa-android"></i> Android (Chrome):</strong>
+          <p style="font-size:12px; color:var(--text-dim); margin-top:3px;">
+            Sağ üstteki <strong>üç nokta (⋮)</strong> menüsüne dokunun ve <strong>"Ana Ekrana Ekle"</strong> veya <strong>"Uygulamayı Yükle"</strong> butonuna basın.
+          </p>
+        </div>
+      </div>
+
+      <!-- Backup and Restore Section -->
+      <div class="settings-section">
+        <h4 style="font-size:14px; color:#fff; font-weight:700; margin-bottom:12px;">Veri Yönetimi & Güvenlik</h4>
+        
+        <div class="settings-item" onclick="exportDataJSON()">
+          <div class="settings-left">
+            <div class="settings-icon"><i class="fa-solid fa-download"></i></div>
+            <div>
+              <div style="font-size:14px; font-weight:600; color:#fff;">Yedek İndir (JSON)</div>
+              <div style="font-size:11px; color:var(--text-dim);">Tüm verilerinizi güvenle dosya olarak saklayın</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-dim); font-size:12px;"></i>
+        </div>
+
+        <div class="settings-item" onclick="document.getElementById('importFileInput').click()">
+          <div class="settings-left">
+            <div class="settings-icon"><i class="fa-solid fa-upload"></i></div>
+            <div>
+              <div style="font-size:14px; font-weight:600; color:#fff;">Yedek Yükle (Geri Yükle)</div>
+              <div style="font-size:11px; color:var(--text-dim);">Daha önce aldığınız yedeği geri yükleyin</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-dim); font-size:12px;"></i>
+          <input type="file" id="importFileInput" style="display:none;" accept=".json" onchange="importDataJSON(event)">
+        </div>
+
+        <div class="settings-item" onclick="exportDataCSV()">
+          <div class="settings-left">
+            <div class="settings-icon"><i class="fa-solid fa-file-excel"></i></div>
+            <div>
+              <div style="font-size:14px; font-weight:600; color:#fff;">Excel / CSV İndir</div>
+              <div style="font-size:11px; color:var(--text-dim);">İşlem geçmişinizi Excel tablosu olarak alın</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-dim); font-size:12px;"></i>
+        </div>
+      </div>
+
+      <!-- PIN & Security Section -->
+      <div class="settings-section">
+        <h4 style="font-size:14px; color:#fff; font-weight:700; margin-bottom:12px;">Güvenlik & Giriş Yönetimi</h4>
+        
+        <div class="settings-item" onclick="openChangePinModal()">
+          <div class="settings-left">
+            <div class="settings-icon" style="color:var(--accent-gold);"><i class="fa-solid fa-key"></i></div>
+            <div>
+              <div style="font-size:14px; font-weight:600; color:#fff;">PIN Kodunu Değiştir</div>
+              <div style="font-size:11px; color:var(--text-dim);">Giriş PIN kodunuzu güncelleyin</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-dim); font-size:12px;"></i>
+        </div>
+
+        <div class="settings-item" onclick="lockApp()">
+          <div class="settings-left">
+            <div class="settings-icon" style="color:var(--accent-red);"><i class="fa-solid fa-lock"></i></div>
+            <div>
+              <div style="font-size:14px; font-weight:600; color:#fff;">Uygulamayı Kilitle (Çıkış Yap)</div>
+              <div style="font-size:11px; color:var(--text-dim);">PIN ekranına dönerek portföyü kilitleyin</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-dim); font-size:12px;"></i>
+        </div>
+
+        <div style="margin-top:10px; padding:10px; background:rgba(15,23,42,0.6); border-radius:8px; display:flex; align-items:center; gap:8px;">
+          <i class="fa-solid fa-shield-halved" style="color:var(--accent-green); font-size:14px;"></i>
+          <span style="font-size:11px; color:var(--text-muted);">Verileriniz ve PIN şifreniz bilgisayarınızdaki <strong style="color:#fff;">veritabani.json</strong> dosyasında güvende tutulur.</span>
+        </div>
+      </div>
+
+      <!-- Danger & Reset Section -->
+      <div class="settings-section">
+        <h4 style="font-size:14px; color:#fff; font-weight:700; margin-bottom:12px;">Test ve Sıfırlama</h4>
+        
+        <div class="settings-item" onclick="loadDemoData()">
+          <div class="settings-left">
+            <div class="settings-icon" style="color:var(--accent-blue);"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+            <div>
+              <div style="font-size:14px; font-weight:600; color:#fff;">Örnek Yatırım Verileri Yükle</div>
+              <div style="font-size:11px; color:var(--text-dim);">Uygulamayı hemen test etmek için örnek kayıtlar ekler</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-dim); font-size:12px;"></i>
+        </div>
+
+        <div class="settings-item" onclick="resetAllData()">
+          <div class="settings-left">
+            <div class="settings-icon" style="color:var(--accent-red);"><i class="fa-solid fa-trash-can"></i></div>
+            <div>
+              <div style="font-size:14px; font-weight:600; color:var(--accent-red);">Tüm Verileri Sıfırla</div>
+              <div style="font-size:11px; color:var(--text-dim);">Tüm portföy ve geçmiş kayıtları temizler</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-dim); font-size:12px;"></i>
+        </div>
+      </div>
+
+      <div style="text-align:center; padding:16px; font-size:11px; color:var(--text-dim);">
+        Altın & Döviz Portföyüm v2.0 • Veriler cihazınızda %100 gizli saklanır
+      </div>
+    </section>
+
+    <!-- BOTTOM TAB NAVIGATION -->
+    <nav class="bottom-nav">
+      <div id="nav-portfolio" class="nav-item active" onclick="setTab('portfolio')">
+        <i class="fa-solid fa-wallet"></i>
+        <span>Portföy</span>
+      </div>
+      <div id="nav-markets" class="nav-item" onclick="setTab('markets')">
+        <i class="fa-solid fa-chart-line"></i>
+        <span>Piyasalar</span>
+      </div>
+      <div id="nav-history" class="nav-item" onclick="setTab('history')">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>İşlemler</span>
+      </div>
+      <div id="nav-analytics" class="nav-item" onclick="setTab('analytics')">
+        <i class="fa-solid fa-chart-pie"></i>
+        <span>Analiz</span>
+      </div>
+      <div id="nav-settings" class="nav-item" onclick="setTab('settings')">
+        <i class="fa-solid fa-gear"></i>
+        <span>Ayarlar</span>
+      </div>
+    </nav>
+
+    <!-- BUY MODAL (Alış Ekle) -->
+    <div id="buyModal" class="modal-overlay" onclick="if(event.target === this) closeBuyModal()">
+      <div class="modal-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <div class="modal-title" style="color:var(--accent-green); display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-circle-plus"></i> Alış İşlemi Ekle
+          </div>
+          <button class="icon-btn" onclick="closeBuyModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <form id="buyForm">
+          <div class="form-group">
+            <label class="form-label">Varlık Türü</label>
+            <select id="buyAssetSelect" class="form-select"></select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">İşlem Tarihi</label>
+            <input type="date" id="buyDate" class="form-input" required>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+            <div class="form-group">
+              <label id="buyUnitLabel" class="form-label">Miktar</label>
+              <input type="number" step="any" id="buyAmount" class="form-input" placeholder="0.00" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Birim Fiyat (₺)</label>
+              <input type="number" step="any" id="buyPrice" class="form-input" placeholder="0.00" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Toplam Ödenen Tutar (₺)</label>
+            <input type="number" step="any" id="buyTotal" class="form-input" placeholder="0.00">
+            <div class="input-hint">Miktar veya toplam tutardan birini girdiğinizde diğeri otomatik hesaplanır.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Not / Açıklama (İsteğe Bağlı)</label>
+            <input type="text" id="buyNote" class="form-input" placeholder="Örn: Kuyumcu Hakan, Banka, vb.">
+          </div>
+
+          <button type="submit" class="btn-submit btn-submit-buy">
+            <i class="fa-solid fa-check"></i> Alışı Kaydet
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- SELL MODAL (Satış Ekle) -->
+    <div id="sellModal" class="modal-overlay" onclick="if(event.target === this) closeSellModal()">
+      <div class="modal-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <div class="modal-title" style="color:var(--accent-red); display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-circle-minus"></i> Satış İşlemi Ekle
+          </div>
+          <button class="icon-btn" onclick="closeSellModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <form id="sellForm">
+          <div class="form-group">
+            <label class="form-label">Satılacak Varlık</label>
+            <select id="sellAssetSelect" class="form-select"></select>
+            <div id="sellBalanceHint" class="input-hint" style="margin-top:6px;"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Satış Tarihi</label>
+            <input type="date" id="sellDate" class="form-input" required>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+            <div class="form-group">
+              <label id="sellUnitLabel" class="form-label">Satılacak Miktar</label>
+              <input type="number" step="any" id="sellAmount" class="form-input" placeholder="0.00" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Satış Birim Fiyatı (₺)</label>
+              <input type="number" step="any" id="sellPrice" class="form-input" placeholder="0.00" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Toplam Ele Geçecek Tutar (₺)</label>
+            <input type="number" step="any" id="sellTotal" class="form-input" placeholder="0.00">
+          </div>
+
+          <!-- Live Profit Preview Badge -->
+          <div id="sellProfitPreview" style="display:none; margin-bottom:14px;"></div>
+
+          <div class="form-group">
+            <label class="form-label">Not / Açıklama (İsteğe Bağlı)</label>
+            <input type="text" id="sellNote" class="form-input" placeholder="Örn: Nakit ihtiyacı, araba alımı vb.">
+          </div>
+
+          <button type="submit" class="btn-submit btn-submit-sell">
+            <i class="fa-solid fa-check"></i> Satışı Onayla ve Portföyden Düş
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- CHANGE PIN MODAL -->
+    <div id="changePinModal" class="modal-overlay" onclick="if(event.target === this) closeChangePinModal()">
+      <div class="modal-sheet">
+        <div class="sheet-handle"></div>
+        <div class="modal-header">
+          <div class="modal-title" style="color:var(--accent-gold); display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-key"></i> PIN Kodunu Değiştir
+          </div>
+          <button class="icon-btn" onclick="closeChangePinModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <form id="changePinForm" onsubmit="handleChangePinSubmit(event)">
+          <div class="form-group">
+            <label class="form-label">Mevcut PIN Kodu</label>
+            <input type="password" id="oldPinInput" maxlength="6" class="form-input" placeholder="••••" required style="letter-spacing:4px; font-size:18px;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Yeni PIN Kodu (4-6 Haneli)</label>
+            <input type="password" id="newPinInput" maxlength="6" class="form-input" placeholder="••••" required style="letter-spacing:4px; font-size:18px;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Yeni PIN Kodu (Tekrar)</label>
+            <input type="password" id="confirmNewPinInput" maxlength="6" class="form-input" placeholder="••••" required style="letter-spacing:4px; font-size:18px;">
+          </div>
+
+          <button type="submit" class="btn-submit" style="background:var(--accent-gold); color:#000;">
+            <i class="fa-solid fa-check"></i> Yeni PIN'i Kaydet
+          </button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Filter Helpers -->
+  <script>
+    function setPortfolioFilter(category, el) {
+      state.portfolioFilter = category;
+      el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      renderPortfolioTab(calculatePortfolio());
+    }
+
+    function setMarketFilter(category, el) {
+      state.marketFilter = category;
+      el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      renderMarketsTab();
+    }
+
+    function setHistoryFilter(filter, el) {
+      state.historyFilter = filter;
+      el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      renderHistoryTab();
+    }
+  </script>
+
+  <!-- Core App Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
